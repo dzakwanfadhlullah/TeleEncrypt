@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ============================================
+     SECTION 1: DESIGN DNA - COLOR PALETTE
+     ============================================ */
+  :root {
+    /* Base Backgrounds */
+    --app-bg: #FAFAFA;
+    --surface-card: #FFFFFF;
+    --glass-surface: rgba(250, 250, 250, 0.7);
+    
+    /* Text Hierarchy */
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-tertiary: #9CA3AF;
+    
+    /* Brand & Accents */
+    --brand-accent: #4F46E5;
+    --accent-subtle: #EEF2FF;
+    --ai-accent: #EC4899;
+    
+    /* Status Colors */
+    --status-success: #10B981;
+    --status-danger: #EF4444;
+    
+    /* Borders */
+    --border-base: rgba(0, 0, 0, 0.08);
+    --border-glass: rgba(255, 255, 255, 0.5);
+    
+    /* Shadows */
+    --shadow-static: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    --shadow-lift: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01);
+    --shadow-focus: 0 0 0 4px rgba(79, 70, 229, 0.15);
+  }
+
+  /* ============================================
+     SECTION 2: TYPOGRAPHY HIERARCHY
+     ============================================ */
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--app-bg);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Display/Headings - Playfair Display */
+  h1, h2, .heading {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+
+  h1 {
+    font-size: 48px;
+  }
+
+  h2 {
+    font-size: 32px;
+  }
+
+  h3 {
+    font-size: 24px;
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* Body Text - Inter */
+  p, body {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  /* Data/Code - JetBrains Mono */
+  code, pre, .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 400;
+  }
+
+  /* ============================================
+     SECTION 3: GLOBAL RESETS
+     ============================================ */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  button {
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* ============================================
+   SECTION 4: UTILITY CLASSES
+   ============================================ */
+@layer utilities {
+  /* Glass Effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  .glass-nav {
+    background: rgba(250, 250, 250, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Shadow Utilities */
+  .shadow-float {
+    box-shadow: var(--shadow-static);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .shadow-float:hover {
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-8px);
+  }
+
+  /* Focus Ring */
+  .focus-ring {
+    outline: none;
+  }
+
+  .focus-ring:focus {
+    box-shadow: var(--shadow-focus);
+  }
+}
