@@ -12,7 +12,9 @@ var DB *gorm.DB
 
 func ConnectDB() {
 	dsn := os.Getenv("DATABASE_URL") // Supabase juga pakai URL Postgres
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		PrepareStmt: false,
+	})
 
 	if err != nil {
 		log.Fatal("Failed to connect to database: ", err)
