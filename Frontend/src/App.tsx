@@ -7,6 +7,7 @@ import { ProfileScreen } from './components/screens/ProfileScreen';
 import { DetailModal } from './components/screens/DetailModal';
 import { EditProfileModal } from './components/modals/EditProfileModal';
 import { Toast } from './components/design-system/Toast';
+import { getUserByEmail, registerUser } from './api';
 
 type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
 
@@ -24,11 +25,11 @@ function App() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const [user, setUser] = useState({ 
-    name: 'Sarah Chen', 
+  const [user, setUser] = useState({
+    name: 'Sarah Chen',
     email: 'sarah@example.com',
     authMethod: 'Logged in with Google OAuth 2.0',
-    joinedDate: 'November 2025'
+    joinedDate: 'November 2025',
   });
 
   const [files, setFiles] = useState<FileItem[]>([
@@ -40,16 +41,35 @@ function App() {
     { id: '6', name: 'logo-design.svg', size: '245 KB', type: 'image', uploadedAt: 'Nov 5, 2025' },
   ]);
 
-  const handleLogin = (email: string, password: string) => {
-    // Mock login
-    setUser({ 
-      name: 'Sarah Chen', 
-      email: email,
-      authMethod: 'Logged in with Google OAuth 2.0',
-      joinedDate: 'November 2025'
-    });
-    setCurrentScreen('dashboard');
-    showNotification('Welcome back! 🎉');
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      if (currentScreen === 'register') {
+        // REGISTER → POST /auth/registrasi
+        await registerUser({
+          username: email.split('@')[0], // sementara pakai nama depan dari email
+          email,
+          password,
+        });
+        showNotification('Account created successfully ✅');
+      } else {
+        // LOGIN → POST /users/email
+        const userFromApi = await getUserByEmail(email);
+
+        setUser({
+          name: userFromApi.username || 'TeleEncrypt User',
+          email: userFromApi.email,
+          authMethod: 'Logged in via API',
+          joinedDate: userFromApi.createdAt || 'Member',
+        });
+
+        showNotification('Welcome back! 🎉');
+      }
+
+      setCurrentScreen('dashboard');
+    } catch (err: any) {
+      console.error(err);
+      showNotification(err.message || 'Authentication failed ❌');
+    }
   };
 
   const handleLogout = () => {
@@ -74,16 +94,20 @@ function App() {
       name: file.name,
       size: formatFileSize(file.size),
       type: getFileType(file.name),
-      uploadedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      uploadedAt: new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
     };
-    
+
     setFiles([newFile, ...files]);
     showNotification('File encrypted and uploaded ✅');
   };
 
   const handleDeleteFile = () => {
     if (selectedFileId) {
-      setFiles(files.filter(f => f.id !== selectedFileId));
+      setFiles(files.filter((f) => f.id !== selectedFileId));
       setSelectedFileId(null);
       showNotification('File deleted successfully 🗑️');
     }
@@ -107,7 +131,7 @@ function App() {
     return 'document';
   };
 
-  const selectedFile = files.find(f => f.id === selectedFileId);
+  const selectedFile = files.find((f) => f.id === selectedFileId);
 
   return (
     <>
@@ -115,12 +139,10 @@ function App() {
       <MatrixBackground />
 
       {/* Screen Router */}
-      {currentScreen === 'welcome' && (
-        <WelcomePortal onNavigate={setCurrentScreen} />
-      )}
+      {currentScreen === 'welcome' && <WelcomePortal onNavigate={setCurrentScreen} />}
 
       {currentScreen === 'login' && (
-        <Authentication 
+        <Authentication
           mode="login"
           onBack={() => setCurrentScreen('welcome')}
           onLogin={handleLogin}
@@ -128,7 +150,7 @@ function App() {
       )}
 
       {currentScreen === 'register' && (
-        <Authentication 
+        <Authentication
           mode="register"
           onBack={() => setCurrentScreen('welcome')}
           onLogin={handleLogin}
@@ -136,7 +158,7 @@ function App() {
       )}
 
       {currentScreen === 'dashboard' && (
-        <Dashboard 
+        <Dashboard
           user={user}
           files={files}
           onFileClick={handleFileClick}
@@ -176,12 +198,7 @@ function App() {
       )}
 
       {/* Toast Notifications */}
-      {showToast && (
-        <Toast
-          message={toastMessage}
-          onClose={() => setShowToast(false)}
-        />
-      )}
+      {showToast && <Toast message={toastMessage} onClose={() => setShowToast(false)} />}
     </>
   );
 }
