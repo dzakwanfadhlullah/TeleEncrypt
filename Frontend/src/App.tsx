@@ -41,30 +41,33 @@ function App() {
     { id: '6', name: 'logo-design.svg', size: '245 KB', type: 'image', uploadedAt: 'Nov 5, 2025' },
   ]);
 
+  // ⬇️ logic baru: register -> balik ke login, login -> ke dashboard
   const handleLogin = async (email: string, password: string) => {
     try {
       if (currentScreen === 'register') {
-        // REGISTER → POST /auth/registrasi
+        // REGISTER: kirim data ke backend, tapi belum auto-login
         await registerUser({
-          username: email.split('@')[0], // sementara pakai nama depan dari email
+          username: email.split('@')[0], // nanti bisa diganti kalau ada field username
           email,
           password,
         });
-        showNotification('Account created successfully ✅');
-      } else {
-        // LOGIN → POST /users/email
-        const userFromApi = await getUserByEmail(email);
 
-        setUser({
-          name: userFromApi.username || 'TeleEncrypt User',
-          email: userFromApi.email,
-          authMethod: 'Logged in via API',
-          joinedDate: userFromApi.createdAt || 'Member',
-        });
-
-        showNotification('Welcome back! 🎉');
+        showNotification('Account created successfully ✅ Please log in.');
+        setCurrentScreen('login'); // balik ke screen login
+        return; // penting: stop di sini, jangan lanjut ke logic login
       }
 
+      // LOGIN: ambil user dari backend dan masuk dashboard
+      const userFromApi = await getUserByEmail(email);
+
+      setUser({
+        name: userFromApi.username || 'TeleEncrypt User',
+        email: userFromApi.email,
+        authMethod: 'Logged in via API',
+        joinedDate: userFromApi.createdAt || 'Member',
+      });
+
+      showNotification('Welcome back! 🎉');
       setCurrentScreen('dashboard');
     } catch (err: any) {
       console.error(err);
@@ -204,3 +207,4 @@ function App() {
 }
 
 export default App;
+    
