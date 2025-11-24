@@ -3,8 +3,9 @@
 export interface User {
   id?: number;
   username?: string;
-  email: string;
+  email?: string;
   createdAt?: string;
+  token?: string;
 }
 
 const API_BASE_URL =
@@ -17,6 +18,7 @@ async function request<T>(
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(options.headers || {}),
     },
     ...options,
   });
@@ -29,7 +31,7 @@ async function request<T>(
         message = (data as any).message;
       }
     } catch {
-      // kalau parse gagal, biarin pakai pesan default
+      // kalau parse gagal, pakai pesan default
     }
     throw new Error(message);
   }
@@ -42,26 +44,43 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
-// POST /users/email -> ambil user by email (buat login)
+export interface RegisterPayload {
+  username: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+// POST /auth/register -> daftar user baru
+export async function registerUser(data: RegisterPayload): Promise<User> {
+  console.log("[API] registerUser:", data);
+
+  return request<User>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// POST /auth/login -> login user
+export async function loginUser(data: LoginPayload): Promise<any> {
+  console.log("[API] loginUser:", data);
+
+  return request<any>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Opsional: masih disimpan kalau mau dipakai BE / debug
 export async function getUserByEmail(email: string): Promise<User> {
   console.log("[API] getUserByEmail:", email);
 
   return request<User>("/users/email", {
     method: "POST",
     body: JSON.stringify({ email }),
-  });
-}
-
-// POST /auth/registrasi -> daftar user baru
-export async function registerUser(data: {
-  username: string;
-  email: string;
-  password: string;
-}): Promise<User> {
-  console.log("[API] registerUser:", data);
-
-  return request<User>("/auth/registrasi", {
-    method: "POST",
-    body: JSON.stringify(data),
   });
 }
