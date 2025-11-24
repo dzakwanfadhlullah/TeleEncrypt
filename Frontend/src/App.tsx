@@ -7,7 +7,7 @@ import { ProfileScreen } from './components/screens/ProfileScreen';
 import { DetailModal } from './components/screens/DetailModal';
 import { EditProfileModal } from './components/modals/EditProfileModal';
 import { Toast } from './components/design-system/Toast';
-import { getUserByEmail, registerUser } from './api';
+import { registerUser, loginUser } from './api';
 
 type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
 
@@ -41,28 +41,32 @@ function App() {
     { id: '6', name: 'logo-design.svg', size: '245 KB', type: 'image', uploadedAt: 'Nov 5, 2025' },
   ]);
 
-  // ⬇️ logic baru: register -> balik ke login, login -> ke dashboard
+  // REGISTER -> balik ke login
+  // LOGIN -> masuk dashboard
   const handleLogin = async (email: string, password: string) => {
     try {
       if (currentScreen === 'register') {
-        // REGISTER: kirim data ke backend, tapi belum auto-login
+        // REGISTER: kirim ke /auth/register, tapi belum auto-login
         await registerUser({
-          username: email.split('@')[0], // nanti bisa diganti kalau ada field username
+          username: email.split('@')[0], // sementara ambil dari email
           email,
           password,
         });
 
         showNotification('Account created successfully ✅ Please log in.');
-        setCurrentScreen('login'); // balik ke screen login
-        return; // penting: stop di sini, jangan lanjut ke logic login
+        setCurrentScreen('login'); // pindah ke screen login
+        return; // stop di sini
       }
 
-      // LOGIN: ambil user dari backend dan masuk dashboard
-      const userFromApi = await getUserByEmail(email);
+      // LOGIN: kirim ke /auth/login
+      const res = await loginUser({ email, password });
+
+      // fleksibel: kalau BE ngirim { user: {...} } atau langsung {... }
+      const userFromApi = (res && (res.user || res)) || {};
 
       setUser({
         name: userFromApi.username || 'TeleEncrypt User',
-        email: userFromApi.email,
+        email: userFromApi.email || email,
         authMethod: 'Logged in via API',
         joinedDate: userFromApi.createdAt || 'Member',
       });
@@ -207,4 +211,3 @@ function App() {
 }
 
 export default App;
-    
