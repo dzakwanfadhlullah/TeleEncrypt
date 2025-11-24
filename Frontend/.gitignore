@@ -1,4 +1,8 @@
 node_modules
 
+<<<<<<< HEAD
 # ignore env lokal
+=======
+# ignore env file lokal
+>>>>>>> 0745148f7bbe64c1abe960f9b7f1f79754cf5f7f
 .env

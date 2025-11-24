@@ -13,6 +13,7 @@ func main() {
 	r := gin.Default()
 	r.GET("/users", controller.GetAllUsers)
 	r.POST("/users/email", controller.GetUserbyEmail)
-	r.POST("/auth/registrasi", controller.Registrasi)
+	r.POST("/auth/register", controller.Registrasi)
+	r.POST("/auth/login", controller.Login)
 	r.Run("localhost:5000")
 }
