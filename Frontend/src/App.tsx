@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MatrixBackground } from './components/MatrixBackground';
 import { WelcomePortal } from './components/screens/WelcomePortal';
 import { Authentication } from './components/screens/Authentication';
@@ -19,6 +19,40 @@ interface FileItem {
   uploadedAt: string;
 }
 
+// key penyimpanan di localStorage
+const FILES_STORAGE_KEY = 'teleencrypt_files_v1';
+
+// default file awal (dipakai kalau localStorage masih kosong / rusak)
+const DEFAULT_FILES: FileItem[] = [
+  { id: '1', name: 'quarterly-report.pdf', size: '2.4 MB', type: 'document', uploadedAt: 'Nov 15, 2025' },
+  { id: '2', name: 'product-screenshot.png', size: '1.8 MB', type: 'image', uploadedAt: 'Nov 14, 2025' },
+  { id: '3', name: 'api-documentation.txt', size: '156 KB', type: 'code', uploadedAt: 'Nov 12, 2025' },
+  { id: '4', name: 'financial-data.xlsx', size: '890 KB', type: 'document', uploadedAt: 'Nov 10, 2025' },
+  { id: '5', name: 'security-audit.pdf', size: '3.2 MB', type: 'document', uploadedAt: 'Nov 8, 2025' },
+  { id: '6', name: 'logo-design.svg', size: '245 KB', type: 'image', uploadedAt: 'Nov 5, 2025' },
+];
+
+// ambil data file dari localStorage (kalau ada)
+function loadFilesFromStorage(): FileItem[] {
+  if (typeof window === 'undefined') {
+    return [...DEFAULT_FILES];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(FILES_STORAGE_KEY);
+    if (!raw) return [...DEFAULT_FILES];
+
+    const parsed = JSON.parse(raw) as FileItem[];
+
+    if (!Array.isArray(parsed)) return [...DEFAULT_FILES];
+    // optional: bisa ditambah validasi field
+    return parsed;
+  } catch (e) {
+    console.error('[files] failed to read from localStorage', e);
+    return [...DEFAULT_FILES];
+  }
+}
+
 function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
@@ -32,14 +66,19 @@ function App() {
     joinedDate: 'November 2025',
   });
 
-  const [files, setFiles] = useState<FileItem[]>([
-    { id: '1', name: 'quarterly-report.pdf', size: '2.4 MB', type: 'document', uploadedAt: 'Nov 15, 2025' },
-    { id: '2', name: 'product-screenshot.png', size: '1.8 MB', type: 'image', uploadedAt: 'Nov 14, 2025' },
-    { id: '3', name: 'api-documentation.txt', size: '156 KB', type: 'code', uploadedAt: 'Nov 12, 2025' },
-    { id: '4', name: 'financial-data.xlsx', size: '890 KB', type: 'document', uploadedAt: 'Nov 10, 2025' },
-    { id: '5', name: 'security-audit.pdf', size: '3.2 MB', type: 'document', uploadedAt: 'Nov 8, 2025' },
-    { id: '6', name: 'logo-design.svg', size: '245 KB', type: 'image', uploadedAt: 'Nov 5, 2025' },
-  ]);
+  // ⬇️ sekarang state files di-load dari localStorage
+  const [files, setFiles] = useState<FileItem[]>(() => loadFilesFromStorage());
+
+  // setiap kali files berubah, simpan ke localStorage → delete/upload jadi permanen
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(files));
+      }
+    } catch (e) {
+      console.error('[files] failed to write to localStorage', e);
+    }
+  }, [files]);
 
   // REGISTER -> balik ke login
   // LOGIN -> masuk dashboard
@@ -82,6 +121,7 @@ function App() {
   const handleLogout = () => {
     setCurrentScreen('welcome');
     showNotification('Logged out successfully 👋');
+    // files TIDAK di-reset -> tetap pakai data di localStorage
   };
 
   const showNotification = (message: string) => {
@@ -95,7 +135,6 @@ function App() {
   };
 
   const handleUploadFile = (file: File) => {
-    // Mock file upload - add to files list
     const newFile: FileItem = {
       id: Date.now().toString(),
       name: file.name,
@@ -108,15 +147,17 @@ function App() {
       }),
     };
 
-    setFiles([newFile, ...files]);
+    // setFiles akan memicu useEffect -> tersimpan di localStorage
+    setFiles((prev) => [newFile, ...prev]);
     showNotification('File encrypted and uploaded ✅');
   };
 
   const handleDeleteFile = () => {
     if (selectedFileId) {
-      setFiles(files.filter((f) => f.id !== selectedFileId));
+      setFiles((prev) => prev.filter((f) => f.id !== selectedFileId));
       setSelectedFileId(null);
       showNotification('File deleted successfully 🗑️');
+      // perubahan juga otomatis ke localStorage via useEffect
     }
   };
 

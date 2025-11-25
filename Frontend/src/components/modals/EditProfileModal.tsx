@@ -4,17 +4,28 @@ import { Button } from '../design-system/Button';
 import { Input } from '../design-system/Input';
 
 interface EditProfileModalProps {
-  user: { name: string; email: string };
+  user: {
+    name: string;
+    email: string;
+    avatarUrl?: string | null;
+  };
   onClose: () => void;
-  onSave: (name: string) => void;
+  // kirim balik nama + avatar (data URL / null)
+  onSave: (name: string, avatarUrl?: string | null) => void;
 }
 
-export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProps) {
+export function EditProfileModal({
+  user,
+  onClose,
+  onSave,
+}: EditProfileModalProps) {
   const [name, setName] = useState(user.name);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(
+    user.avatarUrl ?? null
+  );
 
   const handleSave = () => {
-    onSave(name);
+    onSave(name, avatarPreview ?? null);
     onClose();
   };
 
@@ -30,13 +41,15 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
   };
 
   const initials = name
+    .trim()
     .split(' ')
-    .map(n => n[0])
+    .filter(Boolean)
+    .map((n) => n[0])
     .join('')
-    .toUpperCase();
+    .toUpperCase() || 'U';
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center p-8"
       onClick={onClose}
     >
@@ -47,7 +60,7 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[rgba(0,0,0,0.08)]">
-          <h3 
+          <h3
             className="text-[24px] font-[600] text-[#111827] tracking-[-0.02em]"
             style={{ fontFamily: 'Playfair Display, serif' }}
           >
@@ -72,9 +85,9 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
               {/* Current Avatar */}
               <div className="relative">
                 {avatarPreview ? (
-                  <img 
-                    src={avatarPreview} 
-                    alt="Avatar preview" 
+                  <img
+                    src={avatarPreview}
+                    alt="Avatar preview"
                     className="w-20 h-20 rounded-full object-cover"
                   />
                 ) : (
@@ -89,7 +102,9 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
                 <label className="cursor-pointer">
                   <div className="px-6 py-3 bg-[#F9FAFB] border border-[rgba(0,0,0,0.08)] rounded-full hover:bg-white transition-colors inline-flex items-center gap-2">
                     <Upload className="w-4 h-4 text-[#6B7280]" />
-                    <span className="text-sm text-[#111827] font-medium">Upload New Photo</span>
+                    <span className="text-sm text-[#111827] font-medium">
+                      Upload New Photo
+                    </span>
                   </div>
                   <input
                     type="file"
@@ -128,17 +143,19 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
           </div>
 
           {/* Info Box */}
-          <div 
+          <div
             className="p-4 rounded-2xl border"
             style={{
               background: 'linear-gradient(135deg, #EEF2FF 0%, #FAFAFA 100%)',
-              borderColor: 'rgba(79, 70, 229, 0.15)'
+              borderColor: 'rgba(79, 70, 229, 0.15)',
             }}
           >
             <div className="flex items-start gap-3">
               <User className="w-5 h-5 text-[#4F46E5] flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm text-[#111827] font-medium mb-1">Profile Visibility</p>
+                <p className="text-sm text-[#111827] font-medium mb-1">
+                  Profile Visibility
+                </p>
                 <p className="text-xs text-[#6B7280]">
                   Your profile information is private and only visible to you.
                 </p>
