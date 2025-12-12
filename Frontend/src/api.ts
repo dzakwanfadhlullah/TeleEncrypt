@@ -1,157 +1,206 @@
-// Frontend/src/api.ts
+import React, { useState, useEffect } from 'react';
+import { MatrixBackground } from './components/MatrixBackground';
+import { WelcomePortal } from './components/screens/WelcomePortal';
+import { Authentication } from './components/screens/Authentication';
+import { Dashboard } from './components/screens/Dashboard';
+import { ProfileScreen } from './components/screens/ProfileScreen';
+import { DetailModal } from './components/modals/DetailModal';
+import { EditProfileModal } from './components/modals/EditProfileModal';
+import { Toast } from './components/design-system/Toast';
+import {
+  registerUser, loginUser, listFiles, uploadFile, deleteRemoteFile, RemoteFile,
+} from './api';
+import { getOrCreateKey, encryptFile } from './utils/crypto';
 
-export interface User {
-  id?: number;
-  username?: string;
-  email?: string;
-  createdAt?: string;
-  token?: string;
-  avatar_url?: string;
+type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
+
+interface FileItem {
+  id: string; name: string; size: string; type: 'document' | 'image' | 'code'; uploadedAt: string;
 }
 
-// 1. CONFIG KE BACKEND ASLI (Cuma buat Login/Register)
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+function App() {
+  const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [files, setFiles] = useState<FileItem[]>([]);
 
-// 2. CONFIG STORAGE
-const STORAGE_KEY_FILES_META = 'tele_local_files_meta'; // Simpan daftar nama file
-const STORAGE_PREFIX_FILE_DATA = 'tele_local_file_data_'; // Simpan isi file fisik (Base64)
+  // --- PERSISTENCE HELPERS (AVATAR ONLY) ---
+  const getStoredAvatar = (email: string) => localStorage.getItem(`tele_avatar_${email}`);
+  const saveStoredAvatar = (email: string, url: string) => localStorage.setItem(`tele_avatar_${email}`, url);
 
-// --- HELPER: CONVERT BLOB <-> BASE64 ---
-// Agar file binary bisa disimpan di LocalStorage (Text only)
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+  // Load User dari LocalStorage (Agar tahan refresh)
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('tele_user_session');
+    return saved ? JSON.parse(saved) : {
+      name: 'User', email: '', avatarUrl: null, authMethod: '', joinedDate: ''
+    };
   });
-};
 
-const base64ToBlob = async (base64: string): Promise<Blob> => {
-  const res = await fetch(base64);
-  return await res.blob();
-};
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// --- TYPES ---
-export interface RegisterPayload { username: string; email: string; password: string; }
-export interface LoginPayload { email: string; password: string; }
-export interface RemoteFile {
-  id: string; filename: string; size: number; mimeType: string; createdAt: string;
-}
-
-// =========================================================================
-// BAGIAN 1: AUTHENTICATION (BACKEND ASLI)
-// =========================================================================
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
+  const updateUserState = (newData: any) => {
+    const merged = { ...user, ...newData };
+    setUser(merged);
+    localStorage.setItem('tele_user_session', JSON.stringify(merged));
   };
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-  if (!res.ok) {
-    let message = `Request failed: ${res.status}`;
+
+  // Cek sesi login
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token && user.email && currentScreen === 'welcome') {
+        setCurrentScreen('dashboard');
+    }
+  }, []);
+
+  // --- FORMATTERS ---
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const getFileType = (n: string) => {
+    const ext = n.split('.').pop()?.toLowerCase() || '';
+    if (['jpg','png','gif','svg','webp'].includes(ext)) return 'image';
+    if (['js','ts','json','html','css'].includes(ext)) return 'code';
+    return 'document';
+  };
+
+  const mapFile = (f: RemoteFile): FileItem => ({
+    id: String(f.id), name: f.filename, size: formatFileSize(f.size), type: getFileType(f.filename), uploadedAt: new Date(f.createdAt).toLocaleDateString()
+  });
+
+  const showNotification = (msg: string) => { setToastMessage(msg); setShowToast(true); };
+
+  // --- HANDLERS ---
+  const handleLogin = async (email: string, password: string) => {
     try {
-      const data = await res.json();
-      if (data.message || data.error) message = data.message || data.error;
-    } catch {}
-    throw new Error(message);
-  }
-  return await res.json();
-}
+      if (currentScreen === 'register') {
+        await registerUser({ username: email.split('@')[0], email, password });
+        showNotification('Account created! Login please.');
+        setCurrentScreen('login');
+        return;
+      }
 
-export async function registerUser(data: RegisterPayload): Promise<User> {
-  return request<User>("/auth/register", { method: "POST", body: JSON.stringify(data) });
-}
+      const res = await loginUser({ email, password });
+      await getOrCreateKey();
 
-export async function loginUser(data: LoginPayload): Promise<any> {
-  const response = await request<any>("/auth/login", { method: "POST", body: JSON.stringify(data) });
-  const token = response.token || (response.user && response.user.token);
-  if (token) localStorage.setItem("token", token);
-  return response;
-}
+      const u = res.user || res;
+      const userEmail = u.email || email;
+      const existingAvatar = getStoredAvatar(userEmail);
 
-// =========================================================================
-// BAGIAN 2: FILE MANAGEMENT (PERSISTENT LOCAL STORAGE)
-// =========================================================================
+      const userData = {
+        name: u.username || 'User',
+        email: userEmail,
+        avatarUrl: existingAvatar || null, // Avatar tetap lokal
+        authMethod: 'API Auth',
+        joinedDate: u.createdAt || 'Now',
+      };
 
-export async function listFiles(): Promise<RemoteFile[]> {
-  await delay(300);
-  console.log("[LOCAL] Reading List Files...");
-  const raw = localStorage.getItem(STORAGE_KEY_FILES_META);
-  return raw ? JSON.parse(raw) : [];
-}
-
-export async function uploadFile(file: File): Promise<RemoteFile> {
-  await delay(1000);
-  console.log("[LOCAL] Uploading & Saving Persistent:", file.name);
-
-  // 1. Generate ID
-  const newId = crypto.randomUUID();
-
-  // 2. Convert File (Blob) ke Base64 String
-  const base64Data = await blobToBase64(file);
-
-  // 3. Simpan ISI FILE ke LocalStorage
-  // Note: LocalStorage punya limit sekitar 5MB. File besar mungkin error.
-  try {
-    localStorage.setItem(`${STORAGE_PREFIX_FILE_DATA}${newId}`, base64Data);
-  } catch (e) {
-    throw new Error("Storage Penuh! File terlalu besar untuk demo lokal.");
-  }
-
-  // 4. Simpan Metadata
-  const newFileMeta: RemoteFile = {
-    id: newId,
-    filename: file.name,
-    size: file.size,
-    mimeType: file.type,
-    createdAt: new Date().toISOString()
+      updateUserState(userData);
+      showNotification('Welcome back!');
+      setCurrentScreen('dashboard');
+    } catch (err: any) {
+      showNotification(err.message || 'Auth failed');
+    }
   };
 
-  const currentList = await listFiles();
-  const newList = [newFileMeta, ...currentList];
-  localStorage.setItem(STORAGE_KEY_FILES_META, JSON.stringify(newList));
+  const handleLogout = () => {
+    setCurrentScreen('welcome');
+    localStorage.removeItem('tele_user_session'); 
+    localStorage.removeItem('token');
+    showNotification('Logged out.');
+  };
 
-  return newFileMeta;
+  // FETCH FILES DARI REAL BACKEND
+  const fetchFiles = async () => {
+    try {
+      const remote = await listFiles();
+      // Backend mungkin return null kalau kosong
+      if(Array.isArray(remote)) {
+        setFiles(remote.map(mapFile).reverse());
+      } else {
+        setFiles([]);
+      }
+    } catch { 
+      // Jangan spam error kalau cuma masalah koneksi, cukup console
+      console.warn('Failed to connect to backend for files.');
+    }
+  };
+
+  useEffect(() => {
+    if (currentScreen === 'dashboard') {
+      fetchFiles();
+    }
+  }, [currentScreen]);
+
+  const handleUpload = async (file: File) => {
+    try {
+      showNotification('Encrypting...');
+      
+      const key = await getOrCreateKey();
+      const encBlob = await encryptFile(file, key);
+      
+      // Bungkus Blob Enkripsi jadi File
+      const encFile = new File([encBlob], file.name, { type: file.type });
+      
+      // UPLOAD KE REAL BACKEND
+      const uploaded = await uploadFile(encFile);
+      
+      // Update UI dari response backend
+      setFiles(prev => [mapFile(uploaded), ...prev]);
+      
+      showNotification('Encrypted & Uploaded to Cloud ✅');
+    } catch (e: any) { 
+        console.error(e);
+        showNotification(e.message || 'Upload failed'); 
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedFileId) return;
+    try {
+      await deleteRemoteFile(selectedFileId);
+      setFiles(prev => prev.filter(f => f.id !== selectedFileId));
+      setSelectedFileId(null);
+      showNotification('Deleted from Cloud 🗑️');
+    } catch { showNotification('Delete failed'); }
+  };
+
+  const handleSaveProfile = (name: string, newAvatarUrl?: string) => {
+    updateUserState({ name, ...(newAvatarUrl && { avatarUrl: newAvatarUrl }) });
+    if (newAvatarUrl && user.email) saveStoredAvatar(user.email, newAvatarUrl);
+    showNotification('Profile updated ✅');
+  };
+
+  const selectedFile = files.find(f => f.id === selectedFileId);
+
+  return (
+    <>
+      <MatrixBackground />
+      {currentScreen === 'welcome' && <WelcomePortal onNavigate={setCurrentScreen} />}
+      {(currentScreen === 'login' || currentScreen === 'register') && (
+        <Authentication mode={currentScreen} onBack={() => setCurrentScreen('welcome')} onLogin={handleLogin} />
+      )}
+      {currentScreen === 'dashboard' && (
+        <Dashboard
+          user={user} files={files} onFileClick={setSelectedFileId} onUploadFile={handleUpload}
+          onViewProfile={() => setCurrentScreen('profile')} onEditProfile={() => setShowEditProfile(true)} onLogout={handleLogout}
+        />
+      )}
+      {currentScreen === 'profile' && (
+        <ProfileScreen user={user} onBack={() => setCurrentScreen('dashboard')} onEditProfile={() => setShowEditProfile(true)} onLogout={handleLogout} />
+      )}
+      {selectedFileId && selectedFile && (
+        <DetailModal fileId={selectedFile.id} fileName={selectedFile.name} fileSize={selectedFile.size} onClose={() => setSelectedFileId(null)} onDelete={handleDelete} />
+      )}
+      {showEditProfile && (
+        <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onSave={handleSaveProfile} />
+      )}
+      {showToast && <Toast message={toastMessage} onClose={() => setShowToast(false)} />}
+    </>
+  );
 }
 
-export async function downloadFile(fileId: string): Promise<Blob> {
-  await delay(500);
-  console.log("[LOCAL] Retrieving file:", fileId);
-
-  // 1. Ambil String Base64 dari LocalStorage
-  const base64Data = localStorage.getItem(`${STORAGE_PREFIX_FILE_DATA}${fileId}`);
-
-  if (!base64Data) {
-    throw new Error("File corrupt or not found in local storage.");
-  }
-
-  // 2. Convert balik jadi Blob
-  return await base64ToBlob(base64Data);
-}
-
-export async function deleteRemoteFile(fileId: string): Promise<void> {
-  await delay(500);
-  console.log("[LOCAL] Deleting:", fileId);
-
-  // 1. Hapus Isi File
-  localStorage.removeItem(`${STORAGE_PREFIX_FILE_DATA}${fileId}`);
-
-  // 2. Hapus Metadata dari List
-  const currentList = await listFiles();
-  const newList = currentList.filter(f => f.id !== fileId);
-  localStorage.setItem(STORAGE_KEY_FILES_META, JSON.stringify(newList));
-}
-
-// Avatar Mock (Base64 Persistence)
-export function uploadAvatar(file: File): Promise<{ avatar_url: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({ avatar_url: reader.result as string });
-    reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(file);
-  });
-}
+export default App;
