@@ -53,13 +53,7 @@ export function WelcomePortal({ onNavigate }: WelcomePortalProps) {
             Create Account
           </Button>
           
-          <Button 
-            variant="ghost" 
-            className="w-full"
-            onClick={() => onNavigate('dashboard')}
-          >
-            Guest Access
-          </Button>
+          {/* Tombol Guest Access sudah dihapus di sini */}
         </div>
       </div>
     </div>

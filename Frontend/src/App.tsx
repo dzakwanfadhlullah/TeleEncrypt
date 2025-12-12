@@ -4,53 +4,18 @@ import { WelcomePortal } from './components/screens/WelcomePortal';
 import { Authentication } from './components/screens/Authentication';
 import { Dashboard } from './components/screens/Dashboard';
 import { ProfileScreen } from './components/screens/ProfileScreen';
-import { DetailModal } from './components/screens/DetailModal';
+import { DetailModal } from './components/modals/DetailModal';
 import { EditProfileModal } from './components/modals/EditProfileModal';
 import { Toast } from './components/design-system/Toast';
-import { registerUser, loginUser } from './api';
+import {
+  registerUser, loginUser, listFiles, uploadFile, deleteRemoteFile, RemoteFile,
+} from './api';
+import { getOrCreateKey, encryptFile } from './utils/crypto';
 
 type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
 
 interface FileItem {
-  id: string;
-  name: string;
-  size: string;
-  type: 'document' | 'image' | 'code';
-  uploadedAt: string;
-}
-
-// key penyimpanan di localStorage
-const FILES_STORAGE_KEY = 'teleencrypt_files_v1';
-
-// default file awal (dipakai kalau localStorage masih kosong / rusak)
-const DEFAULT_FILES: FileItem[] = [
-  { id: '1', name: 'quarterly-report.pdf', size: '2.4 MB', type: 'document', uploadedAt: 'Nov 15, 2025' },
-  { id: '2', name: 'product-screenshot.png', size: '1.8 MB', type: 'image', uploadedAt: 'Nov 14, 2025' },
-  { id: '3', name: 'api-documentation.txt', size: '156 KB', type: 'code', uploadedAt: 'Nov 12, 2025' },
-  { id: '4', name: 'financial-data.xlsx', size: '890 KB', type: 'document', uploadedAt: 'Nov 10, 2025' },
-  { id: '5', name: 'security-audit.pdf', size: '3.2 MB', type: 'document', uploadedAt: 'Nov 8, 2025' },
-  { id: '6', name: 'logo-design.svg', size: '245 KB', type: 'image', uploadedAt: 'Nov 5, 2025' },
-];
-
-// ambil data file dari localStorage (kalau ada)
-function loadFilesFromStorage(): FileItem[] {
-  if (typeof window === 'undefined') {
-    return [...DEFAULT_FILES];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(FILES_STORAGE_KEY);
-    if (!raw) return [...DEFAULT_FILES];
-
-    const parsed = JSON.parse(raw) as FileItem[];
-
-    if (!Array.isArray(parsed)) return [...DEFAULT_FILES];
-    // optional: bisa ditambah validasi field
-    return parsed;
-  } catch (e) {
-    console.error('[files] failed to read from localStorage', e);
-    return [...DEFAULT_FILES];
-  }
+  id: string; name: string; size: string; type: 'document' | 'image' | 'code'; uploadedAt: string;
 }
 
 function App() {
@@ -59,193 +24,171 @@ function App() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const [user, setUser] = useState({
-    name: 'Sarah Chen',
-    email: 'sarah@example.com',
-    authMethod: 'Logged in with Google OAuth 2.0',
-    joinedDate: 'November 2025',
+  const [files, setFiles] = useState<FileItem[]>([]);
+
+  // --- PERSISTENCE HELPERS ---
+  const getStoredAvatar = (email: string) => localStorage.getItem(`tele_avatar_${email}`);
+  const saveStoredAvatar = (email: string, url: string) => localStorage.setItem(`tele_avatar_${email}`, url);
+
+  // Load User dari LocalStorage (Agar tahan refresh)
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('tele_user_session');
+    return saved ? JSON.parse(saved) : {
+      name: 'User', email: '', avatarUrl: null, authMethod: '', joinedDate: ''
+    };
   });
 
-  // ⬇️ sekarang state files di-load dari localStorage
-  const [files, setFiles] = useState<FileItem[]>(() => loadFilesFromStorage());
+  // Simpan User ke LocalStorage setiap ada update
+  const updateUserState = (newData: any) => {
+    const merged = { ...user, ...newData };
+    setUser(merged);
+    localStorage.setItem('tele_user_session', JSON.stringify(merged));
+  };
 
-  // setiap kali files berubah, simpan ke localStorage → delete/upload jadi permanen
+  // Cek apakah sudah login sebelumnya saat App pertama dibuka
   useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(files));
-      }
-    } catch (e) {
-      console.error('[files] failed to write to localStorage', e);
+    const token = localStorage.getItem('token');
+    if (token && user.email && currentScreen === 'welcome') {
+        // Auto-redirect ke dashboard jika ada sesi tersimpan
+        setCurrentScreen('dashboard');
     }
-  }, [files]);
+  }, []); // Run once
 
-  // REGISTER -> balik ke login
-  // LOGIN -> masuk dashboard
-  const handleLogin = async (email: string, password: string) => {
-    try {
-      if (currentScreen === 'register') {
-        // REGISTER: kirim ke /auth/register, tapi belum auto-login
-        await registerUser({
-          username: email.split('@')[0], // sementara ambil dari email
-          email,
-          password,
-        });
-
-        showNotification('Account created successfully ✅ Please log in.');
-        setCurrentScreen('login'); // pindah ke screen login
-        return; // stop di sini
-      }
-
-      // LOGIN: kirim ke /auth/login
-      const res = await loginUser({ email, password });
-
-      // fleksibel: kalau BE ngirim { user: {...} } atau langsung {... }
-      const userFromApi = (res && (res.user || res)) || {};
-
-      setUser({
-        name: userFromApi.username || 'TeleEncrypt User',
-        email: userFromApi.email || email,
-        authMethod: 'Logged in via API',
-        joinedDate: userFromApi.createdAt || 'Member',
-      });
-
-      showNotification('Welcome back! 🎉');
-      setCurrentScreen('dashboard');
-    } catch (err: any) {
-      console.error(err);
-      showNotification(err.message || 'Authentication failed ❌');
-    }
-  };
-
-  const handleLogout = () => {
-    setCurrentScreen('welcome');
-    showNotification('Logged out successfully 👋');
-    // files TIDAK di-reset -> tetap pakai data di localStorage
-  };
-
-  const showNotification = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
-  };
-
-  const handleFileClick = (fileId: string) => {
-    setSelectedFileId(fileId);
-    showNotification('File decrypted locally ✨');
-  };
-
-  const handleUploadFile = (file: File) => {
-    const newFile: FileItem = {
-      id: Date.now().toString(),
-      name: file.name,
-      size: formatFileSize(file.size),
-      type: getFileType(file.name),
-      uploadedAt: new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      }),
-    };
-
-    // setFiles akan memicu useEffect -> tersimpan di localStorage
-    setFiles((prev) => [newFile, ...prev]);
-    showNotification('File encrypted and uploaded ✅');
-  };
-
-  const handleDeleteFile = () => {
-    if (selectedFileId) {
-      setFiles((prev) => prev.filter((f) => f.id !== selectedFileId));
-      setSelectedFileId(null);
-      showNotification('File deleted successfully 🗑️');
-      // perubahan juga otomatis ke localStorage via useEffect
-    }
-  };
-
-  const handleSaveProfile = (name: string) => {
-    setUser({ ...user, name });
-    showNotification('Profile updated successfully ✅');
-  };
-
-  const formatFileSize = (bytes: number): string => {
+  // --- FORMATTERS ---
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return '0 B';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const getFileType = (fileName: string): 'document' | 'image' | 'code' => {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext || '')) return 'image';
-    if (['js', 'ts', 'jsx', 'tsx', 'txt', 'json', 'html', 'css'].includes(ext || '')) return 'code';
+  const getFileType = (n: string) => {
+    const ext = n.split('.').pop()?.toLowerCase() || '';
+    if (['jpg','png','gif','svg','webp'].includes(ext)) return 'image';
+    if (['js','ts','json','html','css'].includes(ext)) return 'code';
     return 'document';
   };
 
-  const selectedFile = files.find((f) => f.id === selectedFileId);
+  const mapFile = (f: RemoteFile): FileItem => ({
+    id: String(f.id), name: f.filename, size: formatFileSize(f.size), type: getFileType(f.filename), uploadedAt: new Date(f.createdAt).toLocaleDateString()
+  });
+
+  const showNotification = (msg: string) => { setToastMessage(msg); setShowToast(true); };
+
+  // --- AUTH HANDLERS ---
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      if (currentScreen === 'register') {
+        await registerUser({ username: email.split('@')[0], email, password });
+        showNotification('Account created! Login please.');
+        setCurrentScreen('login');
+        return;
+      }
+
+      const res = await loginUser({ email, password });
+      await getOrCreateKey(); // Init crypto key
+
+      const u = res.user || res;
+      const userEmail = u.email || email;
+      const existingAvatar = getStoredAvatar(userEmail);
+
+      const userData = {
+        name: u.username || 'User',
+        email: userEmail,
+        avatarUrl: existingAvatar || u.avatar_url || null,
+        authMethod: 'API Auth',
+        joinedDate: u.createdAt || 'Now',
+      };
+
+      updateUserState(userData);
+      showNotification('Welcome back!');
+      setCurrentScreen('dashboard');
+    } catch (err: any) {
+      showNotification(err.message || 'Auth failed');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentScreen('welcome');
+    // Hapus sesi user
+    localStorage.removeItem('tele_user_session'); 
+    localStorage.removeItem('token');
+    // JANGAN HAPUS 'tele_local_files_meta' atau avatar kalau mau persistent antar sesi
+    // sessionStorage.clear(); // Hapus key enkripsi (Security: Key harus digenerate ulang tiap login)
+    showNotification('Logged out.');
+  };
+
+  // --- FILE HANDLERS ---
+  
+  // Load files setiap kali masuk dashboard (termasuk habis refresh)
+  useEffect(() => {
+    if (currentScreen === 'dashboard') {
+      listFiles().then((remote) => {
+        setFiles(remote.map(mapFile));
+      }).catch(() => showNotification('Failed to load local files'));
+    }
+  }, [currentScreen]);
+
+  const handleUpload = async (file: File) => {
+    try {
+      showNotification('Encrypting & Saving Locally...');
+      
+      const key = await getOrCreateKey();
+      const encBlob = await encryptFile(file, key);
+      
+      // Bungkus Blob Enkripsi jadi File agar bisa disimpan
+      const encFile = new File([encBlob], file.name, { type: file.type });
+      
+      const uploaded = await uploadFile(encFile);
+      setFiles(prev => [mapFile(uploaded), ...prev]);
+      
+      showNotification('Saved securely to browser storage ✅');
+    } catch (e: any) { 
+        console.error(e);
+        showNotification(e.message || 'Upload failed'); 
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedFileId) return;
+    try {
+      await deleteRemoteFile(selectedFileId);
+      setFiles(prev => prev.filter(f => f.id !== selectedFileId));
+      setSelectedFileId(null);
+      showNotification('Deleted permanently 🗑️');
+    } catch { showNotification('Delete failed'); }
+  };
+
+  const handleSaveProfile = (name: string, newAvatarUrl?: string) => {
+    updateUserState({ name, ...(newAvatarUrl && { avatarUrl: newAvatarUrl }) });
+    if (newAvatarUrl && user.email) saveStoredAvatar(user.email, newAvatarUrl);
+    showNotification('Profile updated ✅');
+  };
+
+  const selectedFile = files.find(f => f.id === selectedFileId);
 
   return (
     <>
-      {/* Matrix Background - Always present */}
       <MatrixBackground />
-
-      {/* Screen Router */}
       {currentScreen === 'welcome' && <WelcomePortal onNavigate={setCurrentScreen} />}
-
-      {currentScreen === 'login' && (
-        <Authentication
-          mode="login"
-          onBack={() => setCurrentScreen('welcome')}
-          onLogin={handleLogin}
-        />
+      {(currentScreen === 'login' || currentScreen === 'register') && (
+        <Authentication mode={currentScreen} onBack={() => setCurrentScreen('welcome')} onLogin={handleLogin} />
       )}
-
-      {currentScreen === 'register' && (
-        <Authentication
-          mode="register"
-          onBack={() => setCurrentScreen('welcome')}
-          onLogin={handleLogin}
-        />
-      )}
-
       {currentScreen === 'dashboard' && (
         <Dashboard
-          user={user}
-          files={files}
-          onFileClick={handleFileClick}
-          onUploadFile={handleUploadFile}
-          onViewProfile={() => setCurrentScreen('profile')}
-          onEditProfile={() => setShowEditProfile(true)}
-          onLogout={handleLogout}
+          user={user} files={files} onFileClick={setSelectedFileId} onUploadFile={handleUpload}
+          onViewProfile={() => setCurrentScreen('profile')} onEditProfile={() => setShowEditProfile(true)} onLogout={handleLogout}
         />
       )}
-
       {currentScreen === 'profile' && (
-        <ProfileScreen
-          user={user}
-          onBack={() => setCurrentScreen('dashboard')}
-          onEditProfile={() => setShowEditProfile(true)}
-          onLogout={handleLogout}
-        />
+        <ProfileScreen user={user} onBack={() => setCurrentScreen('dashboard')} onEditProfile={() => setShowEditProfile(true)} onLogout={handleLogout} />
       )}
-
-      {/* Detail Modal Overlay */}
       {selectedFileId && selectedFile && (
-        <DetailModal
-          fileName={selectedFile.name}
-          fileSize={selectedFile.size}
-          onClose={() => setSelectedFileId(null)}
-          onDelete={handleDeleteFile}
-        />
+        <DetailModal fileId={selectedFile.id} fileName={selectedFile.name} fileSize={selectedFile.size} onClose={() => setSelectedFileId(null)} onDelete={handleDelete} />
       )}
-
-      {/* Edit Profile Modal */}
       {showEditProfile && (
-        <EditProfileModal
-          user={user}
-          onClose={() => setShowEditProfile(false)}
-          onSave={handleSaveProfile}
-        />
+        <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onSave={handleSaveProfile} />
       )}
-
-      {/* Toast Notifications */}
       {showToast && <Toast message={toastMessage} onClose={() => setShowToast(false)} />}
     </>
   );
