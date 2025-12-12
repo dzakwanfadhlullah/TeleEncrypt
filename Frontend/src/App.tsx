@@ -26,7 +26,7 @@ function App() {
   const [toastMessage, setToastMessage] = useState('');
   const [files, setFiles] = useState<FileItem[]>([]);
 
-  // --- PERSISTENCE HELPERS ---
+  // --- PERSISTENCE HELPERS (AVATAR ONLY) ---
   const getStoredAvatar = (email: string) => localStorage.getItem(`tele_avatar_${email}`);
   const saveStoredAvatar = (email: string, url: string) => localStorage.setItem(`tele_avatar_${email}`, url);
 
@@ -38,21 +38,19 @@ function App() {
     };
   });
 
-  // Simpan User ke LocalStorage setiap ada update
   const updateUserState = (newData: any) => {
     const merged = { ...user, ...newData };
     setUser(merged);
     localStorage.setItem('tele_user_session', JSON.stringify(merged));
   };
 
-  // Cek apakah sudah login sebelumnya saat App pertama dibuka
+  // Cek sesi login
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && user.email && currentScreen === 'welcome') {
-        // Auto-redirect ke dashboard jika ada sesi tersimpan
         setCurrentScreen('dashboard');
     }
-  }, []); // Run once
+  }, []);
 
   // --- FORMATTERS ---
   const formatFileSize = (bytes: number) => {
@@ -75,7 +73,7 @@ function App() {
 
   const showNotification = (msg: string) => { setToastMessage(msg); setShowToast(true); };
 
-  // --- AUTH HANDLERS ---
+  // --- HANDLERS ---
   const handleLogin = async (email: string, password: string) => {
     try {
       if (currentScreen === 'register') {
@@ -86,7 +84,7 @@ function App() {
       }
 
       const res = await loginUser({ email, password });
-      await getOrCreateKey(); // Init crypto key
+      await getOrCreateKey();
 
       const u = res.user || res;
       const userEmail = u.email || email;
@@ -95,7 +93,7 @@ function App() {
       const userData = {
         name: u.username || 'User',
         email: userEmail,
-        avatarUrl: existingAvatar || u.avatar_url || null,
+        avatarUrl: existingAvatar || null, // Avatar tetap lokal
         authMethod: 'API Auth',
         joinedDate: u.createdAt || 'Now',
       };
@@ -110,39 +108,50 @@ function App() {
 
   const handleLogout = () => {
     setCurrentScreen('welcome');
-    // Hapus sesi user
     localStorage.removeItem('tele_user_session'); 
     localStorage.removeItem('token');
-    // JANGAN HAPUS 'tele_local_files_meta' atau avatar kalau mau persistent antar sesi
-    // sessionStorage.clear(); // Hapus key enkripsi (Security: Key harus digenerate ulang tiap login)
     showNotification('Logged out.');
   };
 
-  // --- FILE HANDLERS ---
-  
-  // Load files setiap kali masuk dashboard (termasuk habis refresh)
+  // FETCH FILES DARI REAL BACKEND
+  const fetchFiles = async () => {
+    try {
+      const remote = await listFiles();
+      // Backend mungkin return null kalau kosong
+      if(Array.isArray(remote)) {
+        setFiles(remote.map(mapFile).reverse());
+      } else {
+        setFiles([]);
+      }
+    } catch { 
+      // Jangan spam error kalau cuma masalah koneksi, cukup console
+      console.warn('Failed to connect to backend for files.');
+    }
+  };
+
   useEffect(() => {
     if (currentScreen === 'dashboard') {
-      listFiles().then((remote) => {
-        setFiles(remote.map(mapFile));
-      }).catch(() => showNotification('Failed to load local files'));
+      fetchFiles();
     }
   }, [currentScreen]);
 
   const handleUpload = async (file: File) => {
     try {
-      showNotification('Encrypting & Saving Locally...');
+      showNotification('Encrypting...');
       
       const key = await getOrCreateKey();
       const encBlob = await encryptFile(file, key);
       
-      // Bungkus Blob Enkripsi jadi File agar bisa disimpan
+      // Bungkus Blob Enkripsi jadi File
       const encFile = new File([encBlob], file.name, { type: file.type });
       
+      // UPLOAD KE REAL BACKEND
       const uploaded = await uploadFile(encFile);
+      
+      // Update UI dari response backend
       setFiles(prev => [mapFile(uploaded), ...prev]);
       
-      showNotification('Saved securely to browser storage ✅');
+      showNotification('Encrypted & Uploaded to Cloud ✅');
     } catch (e: any) { 
         console.error(e);
         showNotification(e.message || 'Upload failed'); 
@@ -155,7 +164,7 @@ function App() {
       await deleteRemoteFile(selectedFileId);
       setFiles(prev => prev.filter(f => f.id !== selectedFileId));
       setSelectedFileId(null);
-      showNotification('Deleted permanently 🗑️');
+      showNotification('Deleted from Cloud 🗑️');
     } catch { showNotification('Delete failed'); }
   };
 
