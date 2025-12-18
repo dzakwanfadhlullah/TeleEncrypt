@@ -6,17 +6,20 @@ import {
   FileCode,
   Upload,
   ChevronDown,
+  Cloud,
+  HardDrive
 } from 'lucide-react';
 import { Button } from '../design-system/Button';
 import { Dropdown } from '../design-system/Dropdown';
 
-// Interface harus match dengan yang dilempar dari App.tsx
+// Update Interface: Tambah 'source'
 interface FileItem {
   id: string;
   name: string;
   size: string;
   type: 'document' | 'image' | 'code';
   uploadedAt: string;
+  source: 'cloud' | 'local'; // Penanda sumber file
 }
 
 interface DashboardProps {
@@ -74,6 +77,8 @@ export function Dashboard({
     if (selectedFiles && selectedFiles[0]) {
       onUploadFile(selectedFiles[0]);
     }
+    // Reset value agar bisa upload file yang sama berturut-turut
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleUploadAreaClick = () => {
@@ -165,7 +170,7 @@ export function Dashboard({
           </h2>
           <p className="text-[#6B7280] text-sm flex items-center gap-2">
             <Lock className="w-3 h-3" />
-            End-to-end encrypted storage managed by backend
+            End-to-end encrypted storage (Hybrid Cloud/Local)
           </p>
         </div>
 
@@ -186,7 +191,7 @@ export function Dashboard({
             <Upload className={`w-8 h-8 ${dragActive ? 'text-white' : 'text-[#4F46E5]'}`} />
           </div>
           <p className="text-[#111827] font-medium mb-1">Upload a file</p>
-          <p className="text-[#9CA3AF] text-sm">Drag and drop or click to browse (Auto-Encrypted)</p>
+          <p className="text-[#9CA3AF] text-sm">Drag and drop or click to browse (You can choose storage later)</p>
           <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileInputChange} />
         </div>
 
@@ -198,9 +203,24 @@ export function Dashboard({
               onClick={() => onFileClick(file.id)}
               className="group bg-white rounded-[16px] border border-[rgba(0,0,0,0.08)] p-5 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-indigo-500 relative"
             >
-              {/* Icon & Color */}
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${getFileColor(file.type)}`}>
-                {getFileIcon(file.type)}
+              {/* Header: Icon & Source Badge */}
+              <div className="flex justify-between items-start mb-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getFileColor(file.type)}`}>
+                  {getFileIcon(file.type)}
+                </div>
+                
+                {/* Source Indicator Badge */}
+                <div 
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold border ${
+                    file.source === 'cloud' 
+                      ? 'bg-indigo-50 text-indigo-600 border-indigo-100' 
+                      : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                  }`}
+                  title={file.source === 'cloud' ? 'Stored in Cloud Server' : 'Stored in Local Browser'}
+                >
+                  {file.source === 'cloud' ? <Cloud className="w-3 h-3" /> : <HardDrive className="w-3 h-3" />}
+                  <span className="uppercase">{file.source}</span>
+                </div>
               </div>
 
               {/* File Info */}
@@ -213,12 +233,11 @@ export function Dashboard({
 
               {/* Footer: Encrypted Badge & Button */}
               <div className="flex items-center justify-between mt-2 pt-3 border-t border-gray-50">
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 rounded text-xs text-indigo-600 font-medium">
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded text-xs text-gray-500 font-medium">
                   <Lock className="w-3 h-3" />
-                  <span className="hidden sm:inline">Encrypted</span>
+                  <span className="hidden sm:inline">AES-256</span>
                 </div>
                 
-                {/* Tombol Lihat File */}
                 <span className="text-xs text-indigo-600 font-semibold underline decoration-indigo-200 underline-offset-2 group-hover:text-indigo-800 transition-colors">
                   Lihat File →
                 </span>

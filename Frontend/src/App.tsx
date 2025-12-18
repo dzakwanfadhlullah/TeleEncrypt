@@ -6,16 +6,23 @@ import { Dashboard } from './components/screens/Dashboard';
 import { ProfileScreen } from './components/screens/ProfileScreen';
 import { DetailModal } from './components/modals/DetailModal';
 import { EditProfileModal } from './components/modals/EditProfileModal';
+import { StorageOptionModal } from './components/modals/StorageOptionModal'; // Import Modal Baru
 import { Toast } from './components/design-system/Toast';
 import {
-  registerUser, loginUser, listFiles, uploadFile, deleteRemoteFile, RemoteFile,
+  registerUser, loginUser, listFiles, uploadFile, deleteFile, RemoteFile, FileSource
 } from './api';
 import { getOrCreateKey, encryptFile } from './utils/crypto';
 
 type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
 
+// Update Interface: Tambah 'source'
 interface FileItem {
-  id: string; name: string; size: string; type: 'document' | 'image' | 'code'; uploadedAt: string;
+  id: string;
+  name: string;
+  size: string;
+  type: 'document' | 'image' | 'code';
+  uploadedAt: string;
+  source: 'cloud' | 'local';
 }
 
 function App() {
@@ -26,11 +33,14 @@ function App() {
   const [toastMessage, setToastMessage] = useState('');
   const [files, setFiles] = useState<FileItem[]>([]);
 
-  // --- PERSISTENCE HELPERS (AVATAR ONLY) ---
+  // State untuk Hybrid Upload Flow
+  const [pendingFile, setPendingFile] = useState<File | null>(null); // File yang menunggu keputusan
+  const [showStorageOption, setShowStorageOption] = useState(false); // Modal Pilihan
+
+  // --- PERSISTENCE HELPERS ---
   const getStoredAvatar = (email: string) => localStorage.getItem(`tele_avatar_${email}`);
   const saveStoredAvatar = (email: string, url: string) => localStorage.setItem(`tele_avatar_${email}`, url);
 
-  // Load User dari LocalStorage (Agar tahan refresh)
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('tele_user_session');
     return saved ? JSON.parse(saved) : {
@@ -44,7 +54,6 @@ function App() {
     localStorage.setItem('tele_user_session', JSON.stringify(merged));
   };
 
-  // Cek sesi login
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && user.email && currentScreen === 'welcome') {
@@ -68,7 +77,12 @@ function App() {
   };
 
   const mapFile = (f: RemoteFile): FileItem => ({
-    id: String(f.id), name: f.filename, size: formatFileSize(f.size), type: getFileType(f.filename), uploadedAt: new Date(f.createdAt).toLocaleDateString()
+    id: String(f.id),
+    name: f.filename,
+    size: formatFileSize(f.size),
+    type: getFileType(f.filename),
+    uploadedAt: new Date(f.createdAt).toLocaleDateString(),
+    source: f.source // Map source dari API
   });
 
   const showNotification = (msg: string) => { setToastMessage(msg); setShowToast(true); };
@@ -93,7 +107,7 @@ function App() {
       const userData = {
         name: u.username || 'User',
         email: userEmail,
-        avatarUrl: existingAvatar || null, // Avatar tetap lokal
+        avatarUrl: existingAvatar || u.avatar_url || null,
         authMethod: 'API Auth',
         joinedDate: u.createdAt || 'Now',
       };
@@ -108,24 +122,19 @@ function App() {
 
   const handleLogout = () => {
     setCurrentScreen('welcome');
+    setFiles([]);
     localStorage.removeItem('tele_user_session'); 
     localStorage.removeItem('token');
     showNotification('Logged out.');
   };
 
-  // FETCH FILES DARI REAL BACKEND
+  // Load Hybrid Files (Cloud + Local)
   const fetchFiles = async () => {
     try {
-      const remote = await listFiles();
-      // Backend mungkin return null kalau kosong
-      if(Array.isArray(remote)) {
-        setFiles(remote.map(mapFile).reverse());
-      } else {
-        setFiles([]);
-      }
+      const allFiles = await listFiles(); // API sudah handle gabungan Cloud+Local
+      setFiles(allFiles.map(mapFile));
     } catch { 
-      // Jangan spam error kalau cuma masalah koneksi, cukup console
-      console.warn('Failed to connect to backend for files.');
+      console.warn('Failed to load files');
     }
   };
 
@@ -135,9 +144,22 @@ function App() {
     }
   }, [currentScreen]);
 
-  const handleUpload = async (file: File) => {
+  // --- HYBRID UPLOAD FLOW ---
+
+  // 1. Trigger saat user drop/pilih file (Belum upload, tanya dulu)
+  const handleFileSelect = (file: File) => {
+    setPendingFile(file);
+    setShowStorageOption(true); // Buka Modal Pilihan
+  };
+
+  // 2. Eksekusi setelah user memilih opsi (Cloud/Local)
+  const executeUpload = async (source: 'cloud' | 'local') => {
+    setShowStorageOption(false); // Tutup Modal
+    const file = pendingFile;
+    if (!file) return;
+
     try {
-      showNotification('Encrypting...');
+      showNotification(`Encrypting & Uploading to ${source.toUpperCase()}...`);
       
       const key = await getOrCreateKey();
       const encBlob = await encryptFile(file, key);
@@ -145,26 +167,32 @@ function App() {
       // Bungkus Blob Enkripsi jadi File
       const encFile = new File([encBlob], file.name, { type: file.type });
       
-      // UPLOAD KE REAL BACKEND
-      const uploaded = await uploadFile(encFile);
+      // Upload ke tujuan yang dipilih
+      const uploaded = await uploadFile(encFile, source);
       
-      // Update UI dari response backend
       setFiles(prev => [mapFile(uploaded), ...prev]);
       
-      showNotification('Encrypted & Uploaded to Cloud ✅');
+      showNotification(`Securely saved to ${source === 'cloud' ? 'Cloud Server' : 'Local Browser'} ✅`);
     } catch (e: any) { 
         console.error(e);
         showNotification(e.message || 'Upload failed'); 
+    } finally {
+      setPendingFile(null); // Reset pending file
     }
   };
 
   const handleDelete = async () => {
     if (!selectedFileId) return;
+    const targetFile = files.find(f => f.id === selectedFileId);
+    if (!targetFile) return;
+
     try {
-      await deleteRemoteFile(selectedFileId);
+      // Hapus berdasarkan source file tersebut
+      await deleteFile(selectedFileId, targetFile.source);
+      
       setFiles(prev => prev.filter(f => f.id !== selectedFileId));
       setSelectedFileId(null);
-      showNotification('Deleted from Cloud 🗑️');
+      showNotification('Deleted permanently 🗑️');
     } catch { showNotification('Delete failed'); }
   };
 
@@ -185,8 +213,13 @@ function App() {
       )}
       {currentScreen === 'dashboard' && (
         <Dashboard
-          user={user} files={files} onFileClick={setSelectedFileId} onUploadFile={handleUpload}
-          onViewProfile={() => setCurrentScreen('profile')} onEditProfile={() => setShowEditProfile(true)} onLogout={handleLogout}
+          user={user} 
+          files={files} 
+          onFileClick={setSelectedFileId} 
+          onUploadFile={handleFileSelect} // Ubah handler ke 'handleFileSelect'
+          onViewProfile={() => setCurrentScreen('profile')} 
+          onEditProfile={() => setShowEditProfile(true)} 
+          onLogout={handleLogout}
         />
       )}
       {currentScreen === 'profile' && (
@@ -198,6 +231,16 @@ function App() {
       {showEditProfile && (
         <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onSave={handleSaveProfile} />
       )}
+      
+      {/* STORAGE OPTION MODAL (Baru) */}
+      {showStorageOption && pendingFile && (
+        <StorageOptionModal 
+          fileName={pendingFile.name}
+          onClose={() => { setShowStorageOption(false); setPendingFile(null); }}
+          onSelect={executeUpload}
+        />
+      )}
+
       {showToast && <Toast message={toastMessage} onClose={() => setShowToast(false)} />}
     </>
   );
