@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Download, Trash2, Lock, FileText } from 'lucide-react';
+import { X, Download, Trash2, Lock, FileText, Play } from 'lucide-react';
 import { Button } from '../ui/button';
 import { downloadFile, FileSource } from '../../api';
 import { getOrCreateKey, decryptFile } from '../../utils/crypto';
@@ -26,35 +26,42 @@ export function DetailModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // File type helpers
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+  const isPdf = ext === 'pdf';
+  const isVideo = ['mp4', 'webm', 'mov'].includes(ext);
+  const isAudio = ['mp3', 'wav', 'ogg', 'm4a'].includes(ext);
+  const isTextFile = ['txt', 'json', 'js', 'ts', 'md', 'html', 'css', 'csv', 'xml', 'log'].includes(ext);
+
   // ----------------- AUTO DECRYPT LOGIC -----------------
   useEffect(() => {
-    let active = true; // Untuk mencegah race condition jika modal ditutup cepat
+    let active = true;
 
     const fetchAndDecrypt = async () => {
       try {
         setLoading(true);
         setError('');
 
-        // 1. Download File Terenkripsi (Binary/Blob) dari Backend
+        // 1. Download File Terenkripsi
         const encryptedBlob = await downloadFile(fileId, fileSource);
 
         if (!active) return;
 
-        // 2. Ambil Key dari SessionStorage
+        // 2. Ambil Key dari LocalStorage
         const key = await getOrCreateKey();
 
         // 3. Lakukan Dekripsi di Browser
         const originalBlob = await decryptFile(encryptedBlob, key);
 
-        // 4. Buat URL Object agar bisa ditampilkan/didownload
+        // 4. Buat URL Object
         const url = URL.createObjectURL(originalBlob);
         setContentUrl(url);
 
-        // 5. Jika file teks/kodingan, baca isinya untuk preview
-        const ext = fileName.split('.').pop()?.toLowerCase();
-        if (['txt', 'json', 'js', 'ts', 'md', 'html', 'css', 'csv', 'xml'].includes(ext || '')) {
+        // 5. Jika file teks, baca isinya untuk preview
+        if (isTextFile) {
           const text = await originalBlob.text();
-          setTextPreview(text.slice(0, 5000)); // Batasi preview 5000 karakter
+          setTextPreview(text.slice(0, 5000));
         }
 
       } catch (err: any) {
@@ -67,7 +74,6 @@ export function DetailModal({
 
     fetchAndDecrypt();
 
-    // Cleanup: Hapus URL object dari memori saat modal ditutup
     return () => {
       active = false;
       if (contentUrl) URL.revokeObjectURL(contentUrl);
@@ -76,12 +82,11 @@ export function DetailModal({
   }, [fileId]);
 
   // ----------------- HANDLERS -----------------
-
   const handleDownload = () => {
     if (!contentUrl) return;
     const a = document.createElement('a');
     a.href = contentUrl;
-    a.download = fileName; // Download dengan nama asli
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -94,11 +99,6 @@ export function DetailModal({
     }
   };
 
-  // Helper Check Image
-  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(
-    fileName.split('.').pop()?.toLowerCase() || ''
-  );
-
   return (
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
@@ -109,7 +109,7 @@ export function DetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
           <div>
             <h3
               className="text-xl font-bold text-gray-900 truncate max-w-[400px]"
@@ -128,7 +128,7 @@ export function DetailModal({
         </div>
 
         {/* Content Area */}
-        <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50 min-h-[300px]">
+        <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50 min-h-[200px]">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 py-12">
               <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -159,6 +159,40 @@ export function DetailModal({
                 </div>
               )}
 
+              {/* PDF Preview */}
+              {isPdf && contentUrl && (
+                <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
+                  <iframe
+                    src={contentUrl}
+                    title="PDF Preview"
+                    className="w-full h-[500px]"
+                  />
+                </div>
+              )}
+
+              {/* Video Preview */}
+              {isVideo && contentUrl && (
+                <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
+                  <video
+                    src={contentUrl}
+                    controls
+                    className="w-full max-h-[400px]"
+                  >
+                    Your browser does not support video playback.
+                  </video>
+                </div>
+              )}
+
+              {/* Audio Preview */}
+              {isAudio && contentUrl && (
+                <div className="rounded-xl border border-gray-200 shadow-sm bg-white p-6 flex flex-col items-center gap-4">
+                  <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
+                    <Play className="w-8 h-8 text-indigo-600" />
+                  </div>
+                  <audio src={contentUrl} controls className="w-full" />
+                </div>
+              )}
+
               {/* Text Preview */}
               {textPreview && (
                 <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -168,8 +202,8 @@ export function DetailModal({
                 </div>
               )}
 
-              {/* Fallback for other files (PDF, Zip, etc) */}
-              {!isImage && !textPreview && (
+              {/* Fallback for unsupported files */}
+              {!isImage && !isPdf && !isVideo && !isAudio && !textPreview && (
                 <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-200 rounded-xl bg-white">
                   <FileText className="w-12 h-12 text-gray-300 mb-3" />
                   <p className="text-gray-900 font-medium">Preview not available</p>
@@ -180,14 +214,18 @@ export function DetailModal({
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-white">
+        {/* Footer Actions - ALWAYS VISIBLE */}
+        <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-white flex-shrink-0">
           <Button variant="destructive" onClick={handleDelete} disabled={loading}>
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
           </Button>
 
-          <Button variant="primary" onClick={handleDownload} disabled={loading || !!error}>
+          <Button
+            onClick={handleDownload}
+            disabled={loading || !!error || !contentUrl}
+            className="bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Download className="w-4 h-4 mr-2" />
             Download Original
           </Button>
