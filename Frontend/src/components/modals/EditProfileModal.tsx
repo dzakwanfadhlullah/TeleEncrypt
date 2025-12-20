@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload, User } from 'lucide-react';
-import { Button } from '../design-system/Button';
+import { Button } from '../ui/button';
 import { Input } from '../design-system/Input';
 
 interface EditProfileModalProps {

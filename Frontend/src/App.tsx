@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { MatrixBackground } from './components/MatrixBackground';
 import { WelcomePortal } from './components/screens/WelcomePortal';
 import { Authentication } from './components/screens/Authentication';
@@ -9,11 +9,11 @@ import { EditProfileModal } from './components/modals/EditProfileModal';
 import { StorageOptionModal } from './components/modals/StorageOptionModal'; // Import Modal Baru
 import { Toast } from './components/design-system/Toast';
 import {
-  registerUser, loginUser, listFiles, uploadFile, deleteFile, RemoteFile, FileSource
+  registerUser, loginUser, listFiles, uploadFile, deleteFile, RemoteFile
 } from './api';
 import { getOrCreateKey, encryptFile } from './utils/crypto';
 
-type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
+export type Screen = 'welcome' | 'login' | 'register' | 'dashboard' | 'profile';
 
 // Update Interface: Tambah 'source'
 interface FileItem {
@@ -57,7 +57,7 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && user.email && currentScreen === 'welcome') {
-        setCurrentScreen('dashboard');
+      setCurrentScreen('dashboard');
     }
   }, []);
 
@@ -71,8 +71,8 @@ function App() {
 
   const getFileType = (n: string) => {
     const ext = n.split('.').pop()?.toLowerCase() || '';
-    if (['jpg','png','gif','svg','webp'].includes(ext)) return 'image';
-    if (['js','ts','json','html','css'].includes(ext)) return 'code';
+    if (['jpg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
+    if (['js', 'ts', 'json', 'html', 'css'].includes(ext)) return 'code';
     return 'document';
   };
 
@@ -123,7 +123,7 @@ function App() {
   const handleLogout = () => {
     setCurrentScreen('welcome');
     setFiles([]);
-    localStorage.removeItem('tele_user_session'); 
+    localStorage.removeItem('tele_user_session');
     localStorage.removeItem('token');
     showNotification('Logged out.');
   };
@@ -133,7 +133,7 @@ function App() {
     try {
       const allFiles = await listFiles(); // API sudah handle gabungan Cloud+Local
       setFiles(allFiles.map(mapFile));
-    } catch { 
+    } catch {
       console.warn('Failed to load files');
     }
   };
@@ -160,22 +160,22 @@ function App() {
 
     try {
       showNotification(`Encrypting & Uploading to ${source.toUpperCase()}...`);
-      
+
       const key = await getOrCreateKey();
       const encBlob = await encryptFile(file, key);
-      
+
       // Bungkus Blob Enkripsi jadi File
       const encFile = new File([encBlob], file.name, { type: file.type });
-      
+
       // Upload ke tujuan yang dipilih
       const uploaded = await uploadFile(encFile, source);
-      
+
       setFiles(prev => [mapFile(uploaded), ...prev]);
-      
+
       showNotification(`Securely saved to ${source === 'cloud' ? 'Cloud Server' : 'Local Browser'} ✅`);
-    } catch (e: any) { 
-        console.error(e);
-        showNotification(e.message || 'Upload failed'); 
+    } catch (e: any) {
+      console.error(e);
+      showNotification(e.message || 'Upload failed');
     } finally {
       setPendingFile(null); // Reset pending file
     }
@@ -189,14 +189,14 @@ function App() {
     try {
       // Hapus berdasarkan source file tersebut
       await deleteFile(selectedFileId, targetFile.source);
-      
+
       setFiles(prev => prev.filter(f => f.id !== selectedFileId));
       setSelectedFileId(null);
       showNotification('Deleted permanently 🗑️');
     } catch { showNotification('Delete failed'); }
   };
 
-  const handleSaveProfile = (name: string, newAvatarUrl?: string) => {
+  const handleSaveProfile = (name: string, newAvatarUrl?: string | null) => {
     updateUserState({ name, ...(newAvatarUrl && { avatarUrl: newAvatarUrl }) });
     if (newAvatarUrl && user.email) saveStoredAvatar(user.email, newAvatarUrl);
     showNotification('Profile updated ✅');
@@ -213,12 +213,12 @@ function App() {
       )}
       {currentScreen === 'dashboard' && (
         <Dashboard
-          user={user} 
-          files={files} 
-          onFileClick={setSelectedFileId} 
+          user={user}
+          files={files}
+          onFileClick={setSelectedFileId}
           onUploadFile={handleFileSelect} // Ubah handler ke 'handleFileSelect'
-          onViewProfile={() => setCurrentScreen('profile')} 
-          onEditProfile={() => setShowEditProfile(true)} 
+          onViewProfile={() => setCurrentScreen('profile')}
+          onEditProfile={() => setShowEditProfile(true)}
           onLogout={handleLogout}
         />
       )}
@@ -226,15 +226,22 @@ function App() {
         <ProfileScreen user={user} onBack={() => setCurrentScreen('dashboard')} onEditProfile={() => setShowEditProfile(true)} onLogout={handleLogout} />
       )}
       {selectedFileId && selectedFile && (
-        <DetailModal fileId={selectedFile.id} fileName={selectedFile.name} fileSize={selectedFile.size} onClose={() => setSelectedFileId(null)} onDelete={handleDelete} />
+        <DetailModal
+          fileId={selectedFile.id}
+          fileName={selectedFile.name}
+          fileSize={selectedFile.size}
+          fileSource={selectedFile.source}
+          onClose={() => setSelectedFileId(null)}
+          onDelete={handleDelete}
+        />
       )}
       {showEditProfile && (
         <EditProfileModal user={user} onClose={() => setShowEditProfile(false)} onSave={handleSaveProfile} />
       )}
-      
+
       {/* STORAGE OPTION MODAL (Baru) */}
       {showStorageOption && pendingFile && (
-        <StorageOptionModal 
+        <StorageOptionModal
           fileName={pendingFile.name}
           onClose={() => { setShowStorageOption(false); setPendingFile(null); }}
           onSelect={executeUpload}

@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { X, Download, Trash2, Lock, Eye, FileText, Image as ImageIcon, FileCode } from 'lucide-react';
-import { Button } from '../design-system/Button';
-import { downloadFile } from '../../api';
+import { useEffect, useState } from 'react';
+import { X, Download, Trash2, Lock, FileText } from 'lucide-react';
+import { Button } from '../ui/button';
+import { downloadFile, FileSource } from '../../api';
 import { getOrCreateKey, decryptFile } from '../../utils/crypto';
 
 interface DetailModalProps {
   fileId: string;
   fileName: string;
   fileSize: string;
+  fileSource: FileSource;
   onClose: () => void;
   onDelete: () => void | Promise<void>;
 }
@@ -16,6 +17,7 @@ export function DetailModal({
   fileId,
   fileName,
   fileSize,
+  fileSource,
   onClose,
   onDelete,
 }: DetailModalProps) {
@@ -34,7 +36,7 @@ export function DetailModal({
         setError('');
 
         // 1. Download File Terenkripsi (Binary/Blob) dari Backend
-        const encryptedBlob = await downloadFile(fileId);
+        const encryptedBlob = await downloadFile(fileId, fileSource);
 
         if (!active) return;
 
@@ -74,7 +76,7 @@ export function DetailModal({
   }, [fileId]);
 
   // ----------------- HANDLERS -----------------
-  
+
   const handleDownload = () => {
     if (!contentUrl) return;
     const a = document.createElement('a');
@@ -109,8 +111,8 @@ export function DetailModal({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <div>
-            <h3 
-              className="text-xl font-bold text-gray-900 truncate max-w-[400px]" 
+            <h3
+              className="text-xl font-bold text-gray-900 truncate max-w-[400px]"
               style={{ fontFamily: 'Playfair Display, serif' }}
             >
               {fileName}
@@ -180,7 +182,7 @@ export function DetailModal({
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-white">
-          <Button variant="danger" onClick={handleDelete} disabled={loading}>
+          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
           </Button>

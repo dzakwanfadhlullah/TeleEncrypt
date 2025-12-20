@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
 import { Lock, ArrowLeft, Shield, Mail, Calendar, Edit } from 'lucide-react';
-import { Button } from '../design-system/Button';
+import { Button } from '../ui/button'; // Changed from design-system/Button
 
 interface ProfileScreenProps {
   user: { name: string; email: string; avatar?: string; authMethod?: string; joinedDate?: string };
@@ -19,7 +18,7 @@ export function ProfileScreen({ user, onBack, onEditProfile, onLogout }: Profile
   return (
     <div className="min-h-screen">
       {/* Glassmorphic Navbar */}
-      <nav 
+      <nav
         className="sticky top-0 z-40 px-8 py-4 border-b border-[rgba(0,0,0,0.08)]"
         style={{
           background: 'rgba(250, 250, 250, 0.7)',
@@ -50,7 +49,7 @@ export function ProfileScreen({ user, onBack, onEditProfile, onLogout }: Profile
       {/* Main Content */}
       <div className="max-w-[800px] mx-auto px-8 py-12">
         {/* Header */}
-        <h2 
+        <h2
           className="text-[32px] font-[600] text-[#111827] mb-12 tracking-[-0.03em]"
           style={{ fontFamily: 'Playfair Display, serif' }}
         >
@@ -74,7 +73,7 @@ export function ProfileScreen({ user, onBack, onEditProfile, onLogout }: Profile
 
               {/* Name & Email */}
               <div>
-                <h3 
+                <h3
                   className="text-[24px] font-[600] text-[#111827] mb-1 tracking-[-0.02em]"
                   style={{ fontFamily: 'Playfair Display, serif' }}
                 >
@@ -125,7 +124,7 @@ export function ProfileScreen({ user, onBack, onEditProfile, onLogout }: Profile
 
           <div className="space-y-4">
             {/* Authentication Method */}
-            <div 
+            <div
               className="p-4 rounded-2xl border"
               style={{
                 background: 'linear-gradient(135deg, #F0F9FF 0%, #FAFAFA 100%)',
@@ -186,7 +185,7 @@ export function ProfileScreen({ user, onBack, onEditProfile, onLogout }: Profile
           <p className="text-sm text-[#6B7280] mb-6">
             Sign out of your account or manage your session
           </p>
-          <Button variant="danger" onClick={onLogout}>
+          <Button variant="destructive" onClick={onLogout}>
             <Lock className="w-4 h-4" />
             Log Out
           </Button>

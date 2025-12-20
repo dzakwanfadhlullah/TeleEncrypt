@@ -5,7 +5,7 @@ const KEY_LENGTH = 256;
 const IV_LENGTH = 12;
 
 export async function getOrCreateKey(): Promise<CryptoKey> {
-  const storedKey = sessionStorage.getItem('tele_encryption_key');
+  const storedKey = localStorage.getItem('tele_encryption_key');
   if (storedKey) {
     const jwk = JSON.parse(storedKey);
     return window.crypto.subtle.importKey(
@@ -22,7 +22,7 @@ export async function getOrCreateKey(): Promise<CryptoKey> {
     ['encrypt', 'decrypt']
   );
   const exportedKey = await window.crypto.subtle.exportKey('jwk', key);
-  sessionStorage.setItem('tele_encryption_key', JSON.stringify(exportedKey));
+  localStorage.setItem('tele_encryption_key', JSON.stringify(exportedKey));
   return key;
 }
 

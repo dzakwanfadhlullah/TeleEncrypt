@@ -28,7 +28,7 @@ export interface RemoteFile {
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
 
 // 2. CONFIG LOCAL STORAGE
-const STORAGE_KEY_FILES_META = 'tele_local_files_meta'; 
+const STORAGE_KEY_FILES_META = 'tele_local_files_meta';
 const STORAGE_PREFIX_FILE_DATA = 'tele_local_file_data_';
 
 // --- HELPERS ---
@@ -72,7 +72,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     try {
       const data = await res.json();
       if (data.message || data.error) message = data.message || data.error;
-    } catch {}
+    } catch { }
     throw new Error(message);
   }
 
@@ -107,14 +107,14 @@ export async function listFiles(): Promise<RemoteFile[]> {
 
   // A. Ambil dari Cloud (Backend)
   try {
-    const res = await request<any[]>("/files", { method: "GET" });
+    const res = await request<any[]>("/api/files", { method: "GET" });
     // Map response backend ke format RemoteFile
     cloudFiles = res.map(f => ({
-      id: String(f.id),
-      filename: f.filename,
-      size: f.size,
-      mimeType: f.mimeType,
-      createdAt: f.createdAt,
+      id: String(f.file_id),
+      filename: f.file_name,
+      size: f.file_size || 0,
+      mimeType: f.file_type || 'application/octet-stream',
+      createdAt: f.created_at,
       source: 'cloud' as FileSource
     }));
   } catch (err) {
@@ -140,39 +140,41 @@ export async function listFiles(): Promise<RemoteFile[]> {
  * UPLOAD FILE: Bisa ke Cloud atau Local tergantung parameter 'source'
  */
 export async function uploadFile(file: File, targetSource: FileSource): Promise<RemoteFile> {
-  
+
   if (targetSource === 'cloud') {
     // --- OPSI A: UPLOAD KE CLOUD (BACKEND) ---
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch(`${API_BASE_URL}/files/upload`, {
-      method: "POST",
-      headers: getAuthHeaders(), 
+    // NEW BACKEND: PUT /api/upload
+    const res = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
       body: formData,
     });
 
     if (!res.ok) {
       let message = `Upload failed: ${res.status}`;
-      try { const data = await res.json(); if(data.error) message = data.error; } catch {}
+      try { const data = await res.json(); if (data.error) message = data.error; } catch { }
       throw new Error(message);
     }
 
     const uploaded = await res.json();
     return {
-      id: String(uploaded.id),
-      filename: uploaded.filename,
-      size: uploaded.size,
-      mimeType: uploaded.mimeType,
-      createdAt: uploaded.createdAt,
+      id: String(uploaded.file_id || Date.now()), // Fallback if backend response differs
+      filename: uploaded.file_name || file.name,
+      size: uploaded.size || file.size,
+      mimeType: file.type,
+      createdAt: new Date().toISOString(),
       source: 'cloud'
     };
 
   } else {
+    // ... (Local logic remains same)
     // --- OPSI B: SIMPAN DI BROWSER (LOCAL) ---
     await delay(800); // Simulasi loading
     const newId = crypto.randomUUID();
-    
+
     // Convert Blob ke Base64 agar bisa masuk LocalStorage
     const base64Data = await blobToBase64(file);
 
@@ -206,13 +208,27 @@ export async function uploadFile(file: File, targetSource: FileSource): Promise<
  */
 export async function downloadFile(fileId: string, source: FileSource): Promise<Blob> {
   if (source === 'cloud') {
-    // Ambil dari Backend
-    const res = await fetch(`${API_BASE_URL}/files/${fileId}/download`, {
+    // Ambil dari Backend: GET /api/download/:id
+    // Backend returns { url: "signed_url" }, NOT binary blob directly? 
+    // Wait, let's check DownloadFile in backend.
+    // Backend returns JSON { "url": "..." }. Frontend expects Blob.
+    // We need to fetch the Signed URL then fetch the blob.
+
+    const res = await fetch(`${API_BASE_URL}/api/download/${fileId}`, {
       method: "GET",
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error("Download failed from cloud.");
-    return await res.blob();
+
+    if (!res.ok) throw new Error("Failed to get download URL");
+
+    const data = await res.json();
+    if (!data.url) throw new Error("Invalid download URL from server");
+
+    // Fetch actual file from Supabase Signed URL
+    const fileRes = await fetch(data.url);
+    if (!fileRes.ok) throw new Error("Failed to download file from storage");
+
+    return await fileRes.blob();
 
   } else {
     // Ambil dari LocalStorage
@@ -227,12 +243,12 @@ export async function downloadFile(fileId: string, source: FileSource): Promise<
  */
 export async function deleteFile(fileId: string, source: FileSource): Promise<void> {
   if (source === 'cloud') {
-    // Hapus di Backend
-    await request<void>(`/files/${fileId}`, { method: "DELETE" });
+    // Hapus di Backend: DELETE /api/files/delete/:id
+    await request<void>(`/api/files/delete/${fileId}`, { method: "DELETE" });
   } else {
     // Hapus di LocalStorage
     localStorage.removeItem(`${STORAGE_PREFIX_FILE_DATA}${fileId}`);
-    
+
     const raw = localStorage.getItem(STORAGE_KEY_FILES_META);
     if (raw) {
       const list = JSON.parse(raw);
