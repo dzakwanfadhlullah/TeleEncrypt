@@ -70,6 +70,7 @@ func UploadFile(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
+		log.Printf("insertFileRecord error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file metadata"})
 		return
 	}

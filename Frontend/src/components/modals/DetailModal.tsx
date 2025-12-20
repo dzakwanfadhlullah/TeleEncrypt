@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, Download, Trash2, Lock, FileText, Play } from 'lucide-react';
-import { Button } from '../ui/button';
+// import { Button } from '../ui/button'; // Removed - using native buttons
 import { downloadFile, FileSource } from '../../api';
 import { getOrCreateKey, decryptFile } from '../../utils/crypto';
 
@@ -105,7 +105,7 @@ export function DetailModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-[24px] w-full max-w-[640px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white rounded-[24px] w-full max-w-[640px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -127,8 +127,8 @@ export function DetailModal({
           </button>
         </div>
 
-        {/* Content Area */}
-        <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50 min-h-[200px]">
+        {/* Content Area - constrained height to ensure footer is visible */}
+        <div className="p-6 overflow-y-auto bg-gray-50/50 min-h-[150px] max-h-[60vh]">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 py-12">
               <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -215,20 +215,54 @@ export function DetailModal({
         </div>
 
         {/* Footer Actions - ALWAYS VISIBLE */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-white flex-shrink-0">
-          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
-            <Trash2 className="w-4 h-4 mr-2" />
+        <div
+          className="flex items-center justify-between p-6 border-t border-gray-100 bg-white gap-4"
+          style={{ flexShrink: 0, position: 'relative', zIndex: 100 }}
+        >
+          <button
+            onClick={handleDelete}
+            disabled={loading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 500,
+              backgroundColor: '#dc2626',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
             Delete
-          </Button>
+          </button>
 
-          <Button
+          <button
             onClick={handleDownload}
             disabled={loading || !!error || !contentUrl}
-            className="bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: 500,
+              backgroundColor: loading || error || !contentUrl ? '#9ca3af' : '#4f46e5',
+              color: 'white',
+              border: 'none',
+              cursor: loading || error || !contentUrl ? 'not-allowed' : 'pointer',
+              minWidth: '180px'
+            }}
           >
-            <Download className="w-4 h-4 mr-2" />
+            <Download className="w-4 h-4" />
             Download Original
-          </Button>
+          </button>
         </div>
       </div>
     </div>
