@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5" 
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func AuthMiddleware() gin.HandlerFunc {
@@ -50,14 +50,27 @@ func AuthMiddleware() gin.HandlerFunc {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			// Simpan user_id ke context agar bisa diambil di Controller
 			// Catatan: JSON number biasanya jadi float64, perlu konversi jika perlu
-			c.Set("user_id", claims["user_id"])
-			c.Set("email", claims["email"])
-		} else {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Gagal memproses klaim token"})
-			c.Abort()
-			return
-		}
+			userID, ok := claims["user_id"].(string)
+				if !ok || userID == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "user_id tidak valid di token"})
+					c.Abort()
+					return
+				}
 
+				email, _ := claims["email"].(string)
+
+				c.Set("user_id", userID)
+				c.Set("email", email)
+
+				fmt.Println("JWT user_id:", userID)
+
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Gagal memproses klaim token"})
+				c.Abort()
+				return
+			}
+
+			
 		// Lanjut ke handler berikutnya
 		c.Next()
 	}

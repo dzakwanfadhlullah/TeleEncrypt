@@ -31,8 +31,14 @@ func main() {
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	{
-	r.GET("/users", controller.GetAllUsers)
-	r.POST("/users/email", controller.GetUserbyEmail)
+		api.GET("/users", controller.GetAllUsers)
+		api.POST("/users/email", controller.GetUserbyEmail)
+
+		api.GET("/files", controller.GetUserFiles)
+		api.PUT("/upload", controller.UploadFile)
+		api.GET("/download/:id", controller.DownloadFile)
+		api.DELETE("/files/delete/:id", controller.DeleteFile)
+
 	}
 	
 	r.Run("localhost:5000")
